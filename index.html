@@ -861,6 +861,32 @@ textarea{
 <div class="toasts" id="toasts"></div>
 
 <script>
+  // Cargar estado desde Cloudflare KV
+async function cargarEstado() {
+  try {
+    const res = await fetch('/api/state');
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('Error cargando estado:', err);
+    return null;
+  }
+}
+
+// Guardar estado en Cloudflare KV
+async function guardarEstado(estado) {
+  try {
+    const res = await fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(estado)
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Error guardando estado:', err);
+    return null;
+  }
+}
 /* ===============================================================
    ESTADO Y CONSTANTES
    =============================================================== */
@@ -1017,8 +1043,20 @@ function loadState(){
     return freshState();
   }
 }
+// Flag para evitar que el polling sobrescriba mientras el usuario edita
+let guardandoAhora = false;
+let saveTimeout = null;
+
 function saveState(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  // Guarda en la nube con debounce (espera 800ms sin cambios para no saturar)
+  guardandoAhora = true;
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    await guardarEstado(state);
+    // Da margen al polling antes de reactivarse
+    setTimeout(() => { guardandoAhora = false; }, 2000);
+  }, 800);
 }
 let state = loadState();
 
@@ -2392,10 +2430,47 @@ window.openModal = function(name, ctx){
 /* ===============================================================
    BOOT
    =============================================================== */
-renderAll();
+
+// Carga inicial: intenta primero desde la nube, si no usa localStorage
+async function bootApp() {
+  try {
+    const cloudState = await cargarEstado();
+    if (cloudState && cloudState.kids) {
+      // La nube tiene datos válidos → usarlos
+      state = migrate(cloudState);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+    } else {
+      // Primera vez en la nube → subir lo que tengamos local
+      await guardarEstado(state);
+    }
+  } catch (err) {
+    console.warn('No se pudo cargar de la nube, usando local:', err);
+  }
+  renderAll();
+}
+bootApp();
 
 // re-check daily reset every 5 min in case the app stays open across midnight
 setInterval(()=>{ ensureDailyReset(); renderAll(); }, 5*60*1000);
+
+// Polling: sincroniza con la nube cada 15s para ver cambios de otros dispositivos
+setInterval(async () => {
+  if (guardandoAhora) return; // no pisar mientras se está guardando
+  try {
+    const cloudState = await cargarEstado();
+    if (!cloudState || !cloudState.kids) return;
+    // Solo aplicar si realmente cambió (compara JSON serializado)
+    const localStr = JSON.stringify(state);
+    const cloudStr = JSON.stringify(cloudState);
+    if (localStr !== cloudStr) {
+      state = migrate(cloudState);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+      renderAll();
+    }
+  } catch (err) {
+    // silencio: si la red falla, seguimos con local
+  }
+}, 15000);
 </script>
 </body>
 </html>
