@@ -2435,7 +2435,7 @@ window.openModal = function(name, ctx){
 async function bootApp() {
   try {
     const cloudState = await cargarEstado();
-    if (cloudState && cloudState.kids) {
+    if (cloudState && cloudState.gael && cloudState.caleb) {
       // La nube tiene datos válidos → usarlos
       state = migrate(cloudState);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
@@ -2458,7 +2458,7 @@ setInterval(async () => {
   if (guardandoAhora) return; // no pisar mientras se está guardando
   try {
     const cloudState = await cargarEstado();
-    if (!cloudState || !cloudState.kids) return;
+    if (!cloudState || !cloudState.gael || !cloudState.caleb) return;
     // Solo aplicar si realmente cambió (compara JSON serializado)
     const localStr = JSON.stringify(state);
     const cloudStr = JSON.stringify(cloudState);
