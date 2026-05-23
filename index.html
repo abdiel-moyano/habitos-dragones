@@ -893,7 +893,7 @@ async function guardarEstado(estado) {
 
 const STORAGE_KEY = 'habit_tracker_v1';
 
-const HABITS = [
+const DEFAULT_HABITS = [
   // group, id, name, sprite, points
   {id:'h_dientes_am', g:'am', n:'Mano · cara · dientes (mañana)', s:'🪥', p:10},
   {id:'h_orar',       g:'am', n:'Orar',                            s:'🙏', p:10},
@@ -1017,6 +1017,7 @@ function freshState(){
     restDays:[0,6],
     holidays:[],
     activeKid:'gael',
+    habits: JSON.parse(JSON.stringify(DEFAULT_HABITS)),
   };
 }
 
@@ -1030,6 +1031,7 @@ function migrate(s){
   out.restDays = Array.isArray(out.restDays) ? out.restDays : [0,6];
   out.holidays = Array.isArray(out.holidays) ? out.holidays : [];
   out.activeKid = out.activeKid==='caleb' ? 'caleb' : 'gael';
+  out.habits = (Array.isArray(s.habits) && s.habits.length > 0) ? s.habits : JSON.parse(JSON.stringify(DEFAULT_HABITS));
   return out;
 }
 
@@ -1094,7 +1096,7 @@ function nextLevelInfo(xp){
 function calcDailyPct(kid){
   // Solo cuenta hábitos no perdonados
   let total=0, done=0;
-  HABITS.forEach(h=>{
+  state.habits.forEach(h=>{
     if(kid.forgiveness && kid.forgiveness[h.id]) return;
     total++;
     if(h.water){
@@ -1109,7 +1111,7 @@ function calcDailyPct(kid){
 
 function todayPoints(kid){
   let xp=0, coins=0;
-  HABITS.forEach(h=>{
+  state.habits.forEach(h=>{
     if(kid.forgiveness && kid.forgiveness[h.id]) return;
     let dn = false;
     if(h.water){ if((kid.todayWater||0)>=6) dn=true; }
@@ -1203,7 +1205,7 @@ function ensureDailyReset(){
     }
 
     // miss streak por hábito + penalización
-    HABITS.forEach(h=>{
+    state.habits.forEach(h=>{
       if(rest){ return; }
       if(kid.forgiveness && kid.forgiveness[h.id]) return;
       let done = false;
@@ -1259,7 +1261,7 @@ function getKid(){ return state[state.activeKid]; }
 function toggleHabit(hid){
   const kid = getKid();
   if(kid.forgiveness && kid.forgiveness[hid]) return; // no toggle si perdonado
-  const h = HABITS.find(x=>x.id===hid);
+  const h = state.habits.find(x=>x.id===hid);
   const was = !!kid.todayHabits[hid];
   if(was){
     kid.todayHabits[hid] = false;
@@ -1285,7 +1287,7 @@ function awardForHabit(kid, h){
 
 function tapWater(){
   const kid = getKid();
-  const h = HABITS.find(x=>x.water);
+  const h = state.habits.find(x=>x.water);
   if(kid.forgiveness[h.id]) return;
   const prev = kid.todayWater||0;
   if(prev >= 6){
@@ -1317,14 +1319,14 @@ function forgiveHabit(hid){
     // si ya estaba marcado, lo desmarca (no debe sumar dos veces)
     if(kid.todayHabits[hid]){
       // restar
-      const h = HABITS.find(x=>x.id===hid);
+      const h = state.habits.find(x=>x.id===hid);
       kid.xp = Math.max(0, kid.xp - h.p);
       const c = Math.ceil(h.p/2);
       kid.coins = Math.max(0, kid.coins - c);
       kid.monthCoins = Math.max(0, kid.monthCoins - c);
       kid.todayHabits[hid] = false;
     }
-    const h = HABITS.find(x=>x.id===hid);
+    const h = state.habits.find(x=>x.id===hid);
     if(h.water){ kid.todayWater = 0; }
   }
   saveState(); renderAll();
@@ -1333,7 +1335,7 @@ function forgiveHabit(hid){
 function checkPerfectDay(kid){
   // todos los hábitos no perdonados completos + agua llena
   let total=0, done=0;
-  HABITS.forEach(h=>{
+  state.habits.forEach(h=>{
     if(kid.forgiveness[h.id]) return;
     total++;
     if(h.water){ if((kid.todayWater||0)>=6) done++;}
@@ -1505,7 +1507,7 @@ function renderQuests(){
 
   let html = '';
   GROUPS.forEach(g=>{
-    const items = HABITS.filter(h=>h.g===g.id);
+    const items = state.habits.filter(h=>h.g===g.id);
     html += `<div class="quest-group">
       <div class="quest-group__title">${g.icon} ${g.name}</div>`;
     items.forEach(h=>{
@@ -1533,7 +1535,7 @@ function renderQuests(){
   wrap.querySelectorAll('[data-toggle]').forEach(b=>{
     b.addEventListener('click', ()=>{
       const id = b.dataset.toggle;
-      const h = HABITS.find(x=>x.id===id);
+      const h = state.habits.find(x=>x.id===id);
       if(h.water){ tapWater(); } else { toggleHabit(id); }
     });
   });
@@ -1544,7 +1546,7 @@ function renderQuests(){
     b.addEventListener('click', ()=>{
       const kid = getKid();
       const idx = parseInt(b.dataset.water,10);
-      const h = HABITS.find(x=>x.water);
+      const h = state.habits.find(x=>x.water);
       if(kid.forgiveness[h.id]) return;
       const prev = kid.todayWater||0;
       kid.todayWater = (idx <= prev) ? idx-1 : idx;
@@ -1948,6 +1950,10 @@ function renderAdminModal(m){
         <div id="holList" class="mt-8"></div>
       </div>
     </div>
+    <div class="section-h">📋 HÁBITOS</div>
+    <div class="row" style="gap:8px; flex-wrap:wrap;">
+      <button class="btn btn--mp btn--sm" id="btnHabits">✏️ EDITAR LISTA DE HÁBITOS</button>
+    </div>
     <div class="section-h">🔐 PIN Y DATOS</div>
     <div class="row" style="gap:8px; flex-wrap:wrap;">
       <button class="btn btn--gold btn--sm" id="btnPin">CAMBIAR PIN</button>
@@ -2113,6 +2119,9 @@ function renderAdminModal(m){
     if(v && !state.holidays.includes(v)){ state.holidays.push(v); state.holidays.sort(); saveState(); renderHol(); renderAll();}
   });
 
+  // Hábitos
+  m.querySelector('#btnHabits').addEventListener('click', ()=> renderHabitsModal(m));
+
   // Pin / export / import / reset
   m.querySelector('#btnPin').addEventListener('click',()=>{
     const v = prompt('Nuevo PIN de 4 dígitos:', state.parentPin);
@@ -2123,6 +2132,113 @@ function renderAdminModal(m){
   m.querySelector('#btnReset').addEventListener('click', ()=>{
     if(confirm('¿Borrar TODOS los datos? No se puede deshacer.')){
       state = freshState(); saveState(); renderAll(); closeModal();
+    }
+  });
+}
+
+function renderHabitsModal(m){
+  m.classList.add('modal--wide');
+  m.innerHTML = `
+    <div class="modal__title">
+      <h2 style="color:var(--mp);">📋 EDITOR DE HÁBITOS</h2>
+      <button class="modal__close" onclick="renderAdminModal(document.getElementById('modal'))">←</button>
+    </div>
+    <div class="dialog-text">Personaliza los hábitos diarios. Los cambios aplican desde mañana en el historial, pero se ven hoy.</div>
+    <div class="divider"></div>
+    <div class="section-h">➕ NUEVO HÁBITO</div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <div style="width:72px;"><label>ICONO</label><input type="text" id="nhSprite" maxlength="4" value="⭐" style="text-align:center;"/></div>
+      <div style="flex:2; min-width:160px;"><label>NOMBRE</label><input type="text" id="nhName" placeholder="Nombre del hábito"/></div>
+      <div style="width:140px;"><label>GRUPO</label><select id="nhGroup">
+        <option value="am">☀️ Mañana</option>
+        <option value="pm">🌤️ Día</option>
+        <option value="no">🌙 Noche</option>
+      </select></div>
+      <div style="width:80px;"><label>PUNTOS</label><input type="number" id="nhPts" value="10" min="1" max="50"/></div>
+      <button class="btn btn--xp btn--sm" id="btnAddH">➕ AÑADIR</button>
+    </div>
+    <div class="divider"></div>
+    <div id="hList"></div>
+    <div class="row mt-12" style="gap:8px;">
+      <button class="btn btn--ghost btn--sm" id="btnRestoreH">⟳ RESTAURAR PREDETERMINADOS</button>
+    </div>
+  `;
+
+  function reList(){
+    const el = m.querySelector('#hList');
+    let html = '';
+    GROUPS.forEach(g=>{
+      const gH = state.habits.filter(h=>h.g===g.id);
+      if(!gH.length) return;
+      html += `<div class="quest-group__title">${g.icon} ${g.name}</div>`;
+      gH.forEach(h=>{
+        html += `<div class="quest" style="margin-bottom:6px;">
+          <div class="tile">${h.s}</div>
+          <div class="quest__name">${h.n}${h.water?' <span class="tag tag--mp">💧</span>':''}</div>
+          <div class="quest__reward">+${h.p} XP<br>+${Math.ceil(h.p/2)} 🪙</div>
+          <div class="quest__actions">
+            <button class="btn btn--mp btn--xs" data-eh="${h.id}">✏️</button>
+            <button class="btn btn--hp btn--xs" data-dh="${h.id}">🗑️</button>
+          </div>
+        </div>`;
+      });
+    });
+    el.innerHTML = html;
+
+    el.querySelectorAll('[data-eh]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const h = state.habits.find(x=>x.id===b.dataset.eh);
+        if(!h) return;
+        const ns = prompt('Icono (emoji):', h.s);
+        if(ns===null) return;
+        const nn = prompt('Nombre del hábito:', h.n);
+        if(!nn || !nn.trim()) return;
+        const np = +prompt('Puntos XP (1-50):', h.p);
+        if(isNaN(np) || np<1) return;
+        h.s = (ns.trim()||h.s);
+        h.n = nn.trim();
+        h.p = Math.round(Math.min(50,Math.max(1,np)));
+        saveState(); renderAll(); reList();
+        spawnXpToast('✅ HÁBITO ACTUALIZADO','#06ffa5');
+      });
+    });
+
+    el.querySelectorAll('[data-dh]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const h = state.habits.find(x=>x.id===b.dataset.dh);
+        if(!h) return;
+        if(confirm(`¿Eliminar el hábito "${h.n}"?\n\nLos registros históricos no se borran.`)){
+          state.habits = state.habits.filter(x=>x.id!==b.dataset.dh);
+          saveState(); renderAll(); reList();
+        }
+      });
+    });
+  }
+
+  reList();
+
+  m.querySelector('#btnAddH').addEventListener('click', ()=>{
+    const sprite = m.querySelector('#nhSprite').value.trim() || '⭐';
+    const name = m.querySelector('#nhName').value.trim();
+    const group = m.querySelector('#nhGroup').value;
+    const pts = +m.querySelector('#nhPts').value;
+    if(!name){ alert('Escribe un nombre para el hábito.'); return; }
+    if(!pts || pts<1){ alert('Los puntos deben ser al menos 1.'); return; }
+    state.habits.push({
+      id: 'h_' + Date.now(),
+      g: group, n: name, s: sprite, p: Math.round(Math.min(50,pts))
+    });
+    saveState(); renderAll(); reList();
+    m.querySelector('#nhName').value = '';
+    m.querySelector('#nhPts').value = '10';
+    spawnXpToast('✅ HÁBITO AÑADIDO','#06ffa5');
+  });
+
+  m.querySelector('#btnRestoreH').addEventListener('click', ()=>{
+    if(confirm('¿Restaurar los hábitos predeterminados?\nSe reemplazará la lista actual.')){
+      state.habits = JSON.parse(JSON.stringify(DEFAULT_HABITS));
+      saveState(); renderAll(); reList();
+      spawnXpToast('⟳ RESTAURADOS','#4361ee');
     }
   });
 }
@@ -2275,10 +2391,10 @@ function renderEditDayModal(m){
   let html = '';
   GROUPS.forEach(g=>{
     html += `<div class="quest-group__title mt-12">${g.icon} ${g.name}</div>`;
-    HABITS.filter(h=>h.g===g.id).forEach(h=>{
+    state.habits.filter(h=>h.g===g.id).forEach(h=>{
       const done = h.water ? (water>=6) : !!habits[h.id];
       const fg = !!forg[h.id];
-      html += `<div class="quest ${done?'is-done':''} ${fg?'is-forgiven':''}">
+      html += `<div class="quest ${done?'is-done':''} ${fg?'is-forgiven':''}" data-hid="${h.id}">
         <button class="pxcheck ${done?'is-on':''} ${fg?'is-forgiven':''}" data-eh="${h.id}">${fg?'⊘':done?'✔':''}</button>
         <div class="quest__name">${h.s} ${h.n}${h.water?` <span class="tag tag--mp">${water}/6</span>`:''}</div>
         <div class="quest__reward">+${h.p} XP</div>
@@ -2298,7 +2414,7 @@ function renderEditDayModal(m){
   eh.querySelectorAll('[data-eh]').forEach(b=>{
     b.addEventListener('click',()=>{
       const id = b.dataset.eh;
-      const h = HABITS.find(x=>x.id===id);
+      const h = state.habits.find(x=>x.id===id);
       if(localForg[id]) return;
       if(h.water){
         localWater = (localWater>=6)?0:6;
@@ -2320,14 +2436,15 @@ function renderEditDayModal(m){
       if(b.dataset.wm==='+') localWater=Math.min(6, localWater+1);
       else localWater=Math.max(0, localWater-1);
       // ajustar marca del hábito de agua si llega a 6
-      const h = HABITS.find(x=>x.water);
+      const h = state.habits.find(x=>x.water);
       localHabits[h.id] = localWater>=6;
       reRenderEdit();
     });
   });
   function reRenderEdit(){
-    eh.querySelectorAll('.quest').forEach((row, i)=>{
-      const h = HABITS[i];
+    eh.querySelectorAll('.quest').forEach((row)=>{
+      const h = state.habits.find(x=>x.id===row.dataset.hid);
+      if(!h) return;
       const done = h.water ? (localWater>=6) : !!localHabits[h.id];
       const fg = !!localForg[h.id];
       row.className = `quest ${done?'is-done':''} ${fg?'is-forgiven':''}`;
@@ -2370,7 +2487,7 @@ function renderEditDayModal(m){
 
 function computePointsFromMap(habits, water, forg){
   let xp=0, coins=0;
-  HABITS.forEach(h=>{
+  state.habits.forEach(h=>{
     if(forg && forg[h.id]) return;
     let done = false;
     if(h.water) done = (water||0)>=6;
@@ -2381,7 +2498,7 @@ function computePointsFromMap(habits, water, forg){
 }
 function pctFromMap(habits, water, forg){
   let total=0, done=0;
-  HABITS.forEach(h=>{
+  state.habits.forEach(h=>{
     if(forg && forg[h.id]) return;
     total++;
     if(h.water){ if((water||0)>=6) done++; }
