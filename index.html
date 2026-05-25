@@ -1224,6 +1224,7 @@ function ensureDailyReset(){
     kid.todayHabits = {};
     kid.todayWater = 0;
     kid.forgiveness = {};
+    kid._prevMissStreak = {};
     kid.lastDailyReset = t;
 
     // ¿Cambio de mes?
@@ -1265,8 +1266,13 @@ function toggleHabit(hid){
   const was = !!kid.todayHabits[hid];
   if(was){
     kid.todayHabits[hid] = false;
+    kid.missStreak[hid] = kid._prevMissStreak && kid._prevMissStreak[hid] || 0;
+    revokeForHabit(kid, h);
   }else{
     kid.todayHabits[hid] = true;
+    if(!kid._prevMissStreak) kid._prevMissStreak = {};
+    kid._prevMissStreak[hid] = kid.missStreak[hid] || 0;
+    kid.missStreak[hid] = 0;
     awardForHabit(kid, h);
     spawnXpToast(`+${h.p} XP`,'#06ffa5');
     spawnXpToast(`+${Math.ceil(h.p/2)} 🪙`,'#ffd700', 16);
@@ -1285,6 +1291,13 @@ function awardForHabit(kid, h){
   kid.monthCoins += coins;
 }
 
+function revokeForHabit(kid, h){
+  kid.xp = Math.max(0, kid.xp - h.p);
+  const coins = Math.ceil(h.p/2);
+  kid.coins = Math.max(0, kid.coins - coins);
+  kid.monthCoins = Math.max(0, (kid.monthCoins||0) - coins);
+}
+
 function tapWater(){
   const kid = getKid();
   const h = state.habits.find(x=>x.water);
@@ -1294,6 +1307,7 @@ function tapWater(){
     // reset (long-press style: tap when full resets)
     kid.todayWater = 0;
     kid.todayHabits[h.id] = false;
+    revokeForHabit(kid, h);
   }else{
     kid.todayWater = prev+1;
     if(kid.todayWater === 6){
@@ -1518,7 +1532,7 @@ function renderQuests(){
       html += `<div class="${cls}">
         <button class="pxcheck ${done?'is-on':''} ${forg?'is-forgiven':''}" data-toggle="${h.id}" title="${forg?'Perdonado':'Marcar'}">${forg?'⊘': done?'✔':''}</button>
         <div>
-          <div class="quest__name">${h.s} ${h.n}${miss>=2?` <span class="miss-warn">⚠️ ${miss}d sin hacer</span>`:''}</div>
+          <div class="quest__name">${h.s} ${h.n}${miss>=2 && !rest?` <span class="miss-warn">⚠️ ${miss}d sin hacer</span>`:''}</div>
           ${h.water ? `<div class="water">${[1,2,3,4,5,6].map(i=>`<div class="water__drop ${(kid.todayWater||0)>=i?'is-on':''}" data-water="${i}">💧</div>`).join('')}</div>` : ''}
         </div>
         <div class="quest__reward">+${h.p} XP<br>+${Math.ceil(h.p/2)} 🪙</div>
