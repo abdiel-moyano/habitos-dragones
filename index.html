@@ -2358,7 +2358,7 @@ function renderPickDayModal(m){
   let html = '';
   for(let i=0;i<14;i++){
     const d = new Date(today); d.setDate(today.getDate()-i);
-    const ds = d.toISOString().slice(0,10);
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const wd = WEEK_NAMES[d.getDay()];
     const hist = (kid.history||[]).find(h=>h.date===ds);
     const pct = ds===todayStr() ? calcDailyPct(kid) : (hist?hist.pct:null);
