@@ -2639,6 +2639,7 @@ async function bootApp() {
     if (cloudState && cloudState.gael && cloudState.caleb) {
       // La nube tiene datos válidos → usarlos
       state = migrate(cloudState);
+      ensureDailyReset();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
     } else {
       // Primera vez en la nube → subir lo que tengamos local
@@ -2665,6 +2666,7 @@ setInterval(async () => {
     const cloudStr = JSON.stringify(cloudState);
     if (localStr !== cloudStr) {
       state = migrate(cloudState);
+      ensureDailyReset();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
       renderAll();
     }
