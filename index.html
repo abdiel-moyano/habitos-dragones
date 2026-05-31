@@ -319,6 +319,19 @@ button{font-family:inherit; font-size:inherit; color:inherit; cursor:pointer;}
 .pet__level{ font-family:'Press Start 2P',monospace; font-size:9px; color:var(--gold);}
 .pet__desc{ color:var(--ink-dim); font-size:18px; line-height:1.1;}
 
+/* Billetera */
+.wallet-bal{ font-family:'Press Start 2P',monospace; font-size:20px; color:var(--xp);}
+.wallet-bal--neg{ color:var(--hp);}
+.txn-list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; max-height:340px; overflow-y:auto;}
+.txn-row{ display:flex; align-items:center; gap:8px; padding:8px 10px; background:rgba(0,0,0,.25); border-radius:4px; font-size:16px;}
+.txn-row__date{ color:var(--ink-dim); font-size:14px; min-width:70px;}
+.txn-row__concept{ flex:1; color:var(--ink);}
+.txn-row__amt{ font-family:'Press Start 2P',monospace; font-size:10px; white-space:nowrap;}
+.txn-row__amt--ing{ color:var(--xp);}
+.txn-row__amt--egr{ color:var(--hp);}
+.txn-form{ display:flex; flex-direction:column; gap:8px; margin-top:10px;}
+.txn-type-row{ display:flex; gap:6px;}
+
 /* Cofre sueldo */
 .treasure{
   display:flex; align-items:center; gap:14px;
@@ -786,6 +799,15 @@ textarea{
       </div>
 
       <div class="frame">
+        <div class="row row--between" style="margin-bottom:8px;">
+          <h2 style="color:var(--xp);">BILLETERA</h2>
+          <button class="btn btn--xp btn--xs" data-open="wallet">VER →</button>
+        </div>
+        <div class="wallet-bal" id="walletBal">$0</div>
+        <div class="muted" style="font-size:14px; margin-top:4px;" id="walletTxnCount">sin movimientos</div>
+      </div>
+
+      <div class="frame">
         <h2 style="color:var(--purple-2); margin-bottom:10px;">MASCOTA · DEX</h2>
         <div class="pet">
           <div class="pet__cage"><span class="pet__sprite" id="petSprite">🥚</span></div>
@@ -840,6 +862,7 @@ textarea{
   <div class="menubar__inner">
     <button class="btn btn--gold" data-open="shop">🛒 TIENDA</button>
     <button class="btn btn--gold" data-open="salary">💰 SUELDO</button>
+    <button class="btn btn--xp"  data-open="wallet">💵 BILLETERA</button>
     <button class="btn btn--mp"   data-open="notes">📜 ANOTAR</button>
     <button class="btn btn--xp"   data-open="history">📅 HISTORIAL</button>
     <button class="btn btn--hp"   data-open="streaks">🔥 RACHAS</button>
@@ -1005,7 +1028,8 @@ function emptyKid(){
     payoutHistory:[],
     forgiveness:{},
     annotations:[],
-    missStreak:{}
+    missStreak:{},
+    wallet:{ transactions:[] }
   };
 }
 
@@ -1155,6 +1179,10 @@ function estimateSalary(target){
   amount = Math.min(20000, amount);
   amount = Math.round(amount/100)*100;
   return {pct, multiplier:m, base, amount, hadActivity};
+}
+
+function walletBalance(kid){
+  return (kid.wallet?.transactions||[]).reduce((s,t)=> t.type==='ingreso' ? s+t.amount : s-t.amount, 0);
 }
 
 /* ===============================================================
@@ -1509,6 +1537,15 @@ function renderKidPanel(){
   const sp = Math.min(100, Math.round((est.amount/20000)*100));
   document.getElementById('salaryBar').style.width = sp + '%';
   document.getElementById('salaryBarTxt').textContent = `${fmtCLP(est.amount)} / $20.000`;
+
+  // Wallet
+  const bal = walletBalance(kid);
+  const balEl = document.getElementById('walletBal');
+  balEl.textContent = fmtCLP(bal);
+  balEl.className = 'wallet-bal' + (bal < 0 ? ' wallet-bal--neg' : '');
+  const txnCount = (kid.wallet?.transactions||[]).length;
+  document.getElementById('walletTxnCount').textContent =
+    txnCount === 0 ? 'sin movimientos' : `${txnCount} movimiento${txnCount!==1?'s':''}`;
 }
 
 function renderQuests(){
@@ -1611,6 +1648,7 @@ const modals = {
   adminPin: renderAdminPin,
   editDay: renderEditDayModal,
   pickDay: renderPickDayModal,
+  wallet: renderWalletModal,
 };
 
 let modalCtx = {};
@@ -1941,6 +1979,8 @@ function renderAdminModal(m){
     <div class="dialog-text">Vista doble · ${MONTH_NAMES[new Date().getMonth()]} ${new Date().getFullYear()}</div>
     <div class="divider"></div>
     <div class="kid-col" id="kidCols"></div>
+    <div class="section-h">💵 BILLETERA</div>
+    <div id="adminWallet"></div>
     <div class="section-h">🛒 CANJES PENDIENTES DE ENTREGAR</div>
     <div id="adminPurchases"></div>
     <div class="section-h">💰 SUELDOS PENDIENTES DE PAGAR</div>
@@ -2043,6 +2083,34 @@ function renderAdminModal(m){
     });
   });
 
+  // Wallet
+  const aw = m.querySelector('#adminWallet');
+  aw.innerHTML = ['gael','caleb'].map(k=>{
+    const bal = walletBalance(state[k]);
+    const last = (state[k].wallet?.transactions||[]).slice(-3).reverse();
+    return `<div class="frame frame--small" style="margin-bottom:8px;">
+      <div class="row row--between mb-8">
+        <div class="row" style="gap:8px;">
+          <span>${KIDS[k].emoji}</span>
+          <span class="ps" style="font-size:10px; color:var(--gold);">${KIDS[k].name.toUpperCase()}</span>
+        </div>
+        <div class="wallet-bal${bal<0?' wallet-bal--neg':''}" style="font-size:14px;">${fmtCLP(bal)}</div>
+      </div>
+      ${last.length ? last.map(t=>`
+        <div class="txn-row" style="font-size:14px;">
+          <div class="txn-row__date">${t.date.slice(5).replace('-','/')}</div>
+          <div class="txn-row__concept">${t.concept}</div>
+          <div class="txn-row__amt txn-row__amt--${t.type==='ingreso'?'ing':'egr'}">${t.type==='ingreso'?'+':'-'}${fmtCLP(t.amount)}</div>
+        </div>`).join('') : '<div class="muted" style="font-size:14px; padding:4px 0;">sin movimientos</div>'}
+      <div class="row mt-8" style="gap:6px;">
+        <button class="btn btn--xp btn--xs" data-wallet-add="${k}">+ AGREGAR MOVIMIENTO</button>
+      </div>
+    </div>`;
+  }).join('');
+  aw.querySelectorAll('[data-wallet-add]').forEach(b=>{
+    b.addEventListener('click', ()=> renderWalletAdminModal(m, b.dataset.walletAdd));
+  });
+
   // Purchases pending
   const pp = m.querySelector('#adminPurchases');
   const pendingAll = [];
@@ -2093,7 +2161,9 @@ function renderAdminModal(m){
   pa.querySelectorAll('[data-pay-ok]').forEach(b=>{
     b.addEventListener('click', ()=>{
       const [k,idx] = b.dataset.payOk.split(':');
-      state[k].payoutHistory[+idx].status='pagado';
+      const p = state[k].payoutHistory[+idx];
+      p.status='pagado';
+      addWalletTransaction(k, 'ingreso', `Sueldo ${p.month}`, p.amount);
       saveState(); renderAdminModal(m);
     });
   });
@@ -2602,6 +2672,91 @@ setInterval(async () => {
     // silencio: si la red falla, seguimos con local
   }
 }, 15000);
+
+/* ===============================================================
+   BILLETERA
+   =============================================================== */
+function renderWalletModal(m){
+  const k = state.activeKid;
+  const kid = state[k];
+  const meta = KIDS[k];
+  const bal = walletBalance(kid);
+  const txns = (kid.wallet?.transactions||[]).slice().reverse();
+  m.classList.remove('modal--wide');
+  m.innerHTML = `
+    <div class="modal__title">
+      <h2 style="color:var(--xp);">💵 BILLETERA · ${meta.name.toUpperCase()}</h2>
+      <button class="modal__close" onclick="closeModal()">[X]</button>
+    </div>
+    <div style="text-align:center; padding:14px 0 8px;">
+      <div class="muted" style="font-size:16px; margin-bottom:4px;">SALDO DISPONIBLE</div>
+      <div class="wallet-bal${bal<0?' wallet-bal--neg':''}" style="font-size:26px;">${fmtCLP(bal)}</div>
+    </div>
+    <div class="divider"></div>
+    <div class="txn-list" id="txnList">
+      ${txns.length===0
+        ? '<div class="muted center" style="padding:20px;">— sin movimientos registrados —</div>'
+        : txns.map(t=>`
+          <div class="txn-row">
+            <div class="txn-row__date">${t.date.slice(5).replace('-','/')}</div>
+            <div class="txn-row__concept">${t.concept}</div>
+            <div class="txn-row__amt txn-row__amt--${t.type==='ingreso'?'ing':'egr'}">
+              ${t.type==='ingreso'?'+':'-'}${fmtCLP(t.amount)}
+            </div>
+          </div>`).join('')
+      }
+    </div>
+  `;
+}
+
+function addWalletTransaction(k, type, concept, amount){
+  if(!state[k].wallet) state[k].wallet = { transactions:[] };
+  state[k].wallet.transactions.push({
+    id: Date.now(),
+    date: todayStr(),
+    concept: concept.trim(),
+    amount: Math.round(amount),
+    type
+  });
+  saveState(); renderAll();
+}
+
+function renderWalletAdminModal(m, k){
+  const meta = KIDS[k];
+  let selType = 'ingreso';
+  m.classList.remove('modal--wide');
+  const draw = ()=>{
+    m.innerHTML = `
+      <div class="modal__title">
+        <h2 style="color:var(--xp);">💵 AGREGAR MOVIMIENTO · ${meta.name.toUpperCase()}</h2>
+        <button class="modal__close" onclick="renderAdminModal(document.getElementById('modal'))">←</button>
+      </div>
+      <div class="dialog-text">Registra un ingreso o egreso en la billetera real de ${meta.name}.</div>
+      <div class="divider"></div>
+      <div class="txn-form">
+        <div class="txn-type-row">
+          <button class="btn btn--xp btn--sm${selType==='ingreso'?' btn--active':''}" id="btnIng">+ INGRESO</button>
+          <button class="btn btn--hp btn--sm${selType==='egreso'?' btn--active':''}" id="btnEgr">- EGRESO</button>
+        </div>
+        <input id="txnConcept" type="text" placeholder="Concepto (ej: mesada, regalo, juguete…)" style="font-family:VT323; font-size:20px; padding:8px; background:var(--bg-mid); color:var(--ink); border:1px solid var(--border); border-radius:4px; width:100%; box-sizing:border-box;"/>
+        <input id="txnAmount" type="number" min="1" placeholder="Monto en CLP" style="font-family:VT323; font-size:20px; padding:8px; background:var(--bg-mid); color:var(--ink); border:1px solid var(--border); border-radius:4px; width:100%; box-sizing:border-box;"/>
+        <button class="btn btn--gold btn--sm" id="btnTxnAdd">REGISTRAR</button>
+      </div>
+    `;
+    m.querySelector('#btnIng').addEventListener('click',()=>{ selType='ingreso'; draw(); });
+    m.querySelector('#btnEgr').addEventListener('click',()=>{ selType='egreso'; draw(); });
+    m.querySelector('#btnTxnAdd').addEventListener('click',()=>{
+      const concept = m.querySelector('#txnConcept').value;
+      const amount  = parseFloat(m.querySelector('#txnAmount').value);
+      if(!concept.trim()){ alert('Escribe un concepto.'); return; }
+      if(!amount || amount<=0){ alert('Monto inválido.'); return; }
+      addWalletTransaction(k, selType, concept, amount);
+      renderAdminModal(m);
+      spawnXpToast(`${selType==='ingreso'?'+':'-'}${fmtCLP(amount)} · ${meta.name}`,'#06ffa5');
+    });
+  };
+  draw();
+}
 </script>
 </body>
 </html>
