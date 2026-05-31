@@ -1042,6 +1042,7 @@ function freshState(){
     holidays:[],
     activeKid:'gael',
     habits: JSON.parse(JSON.stringify(DEFAULT_HABITS)),
+    _savedAt: 0,
   };
 }
 
@@ -1074,6 +1075,7 @@ let guardandoAhora = false;
 let saveTimeout = null;
 
 function saveState(){
+  state._savedAt = Date.now();
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
   // Guarda en la nube con debounce (espera 800ms sin cambios para no saturar)
   guardandoAhora = true;
@@ -2637,10 +2639,12 @@ async function bootApp() {
   try {
     const cloudState = await cargarEstado();
     if (cloudState && cloudState.gael && cloudState.caleb) {
-      // La nube tiene datos válidos → usarlos
-      state = migrate(cloudState);
-      ensureDailyReset();
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+      // Solo aplicar la nube si es más reciente que el estado local
+      if ((cloudState._savedAt||0) >= (state._savedAt||0)) {
+        state = migrate(cloudState);
+        ensureDailyReset();
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+      }
     } else {
       // Primera vez en la nube → subir lo que tengamos local
       await guardarEstado(state);
@@ -2664,7 +2668,7 @@ setInterval(async () => {
     // Solo aplicar si realmente cambió (compara JSON serializado)
     const localStr = JSON.stringify(state);
     const cloudStr = JSON.stringify(cloudState);
-    if (localStr !== cloudStr) {
+    if (localStr !== cloudStr && (cloudState._savedAt||0) >= (state._savedAt||0)) {
       state = migrate(cloudState);
       ensureDailyReset();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
